@@ -102,7 +102,6 @@ if archivo_subido is not None:
             def header(self):
                 self.set_font("Helvetica", "B", 14)
                 self.set_text_color(46, 125, 50)
-                # Formato universal: Escribir celda y hacer salto de línea manual con ln()
                 self.cell(190, 10, "PARTE DIARIO DE TRABAJO", border=1, align="C")
                 self.ln(15)
 
@@ -183,99 +182,4 @@ if archivo_subido is not None:
         pdf.cell(45, 6, "Cantidad", border=1, fill=True)
         pdf.cell(45, 6, "Unidad", border=1, fill=True)
         pdf.ln(6)
-        pdf.set_font("Helvetica", "", 10)
-        if not materiales_datos:
-            pdf.cell(190, 6, "No se registraron materiales", border=1)
-            pdf.ln(6)
-        for mat, cant, uni in materiales_datos:
-            pdf.cell(100, 6, limpiar_texto_pdf(mat), border=1)
-            pdf.cell(45, 6, limpiar_texto_pdf(cant), border=1)
-            pdf.cell(45, 6, limpiar_texto_pdf(uni), border=1)
-            pdf.ln(6)
-        pdf.ln(8)
-        
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(190, 6, f"Kilometros realizados: {km} km")
-        pdf.ln(6)
-
-        # Firmas
-        pdf.ln(15)
-        pos_y = pdf.get_y()
-        pdf.line(20, pos_y + 15, 80, pos_y + 15)
-        pdf.line(130, pos_y + 15, 190, pos_y + 15)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_y(pos_y + 16)
-        pdf.cell(95, 5, "Firma del Cliente", align="C")
-        pdf.cell(95, 5, "Firma del Jefe de Obra", align="C")
-
-        pdf_output = pdf.output()
-
-        # --- MODIFICAR EXCEL EN MEMORIA ---
-        wb = openpyxl.load_workbook(archivo_subido)
-        
-        if "Base de Datos" not in wb.sheetnames:
-            ws_base = wb.create_sheet(title="Base de Datos")
-            ws_base.append(["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
-        else:
-            ws_base = wb["Base de Datos"]
-            
-        nueva_fila = [fecha, num_parte, obra, cliente, ubicacion, operarios_texto, materiales_texto, km, "No"]
-        ws_base.append(nueva_fila)
-
-        if "Historial_Horas" not in wb.sheetnames:
-            ws_horas = wb.create_sheet(title="Historial_Horas")
-            ws_horas.append(["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas"])
-        else:
-            ws_horas = wb["Historial_Horas"]
-
-        for nombre_op, horas_op in operarios_datos_crudos:
-            ws_horas.append([fecha, num_parte, obra, nombre_op, horas_op])
-
-        # Limpieza de columnas G y H para recalcular totales de forma segura
-        for fila in range(1, ws_horas.max_row + 1):
-            ws_horas[f"G{fila}"] = None
-            ws_horas[f"H{fila}"] = None
-
-        ws_horas["G1"] = "OPERARIO (TOTALES)"
-        ws_horas["H1"] = "TOTAL ACUMULADO"
-
-        totales_acumulados = {}
-        for r in range(2, ws_horas.max_row + 1):
-            op_col_d = ws_horas[f"D{r}"].value
-            hr_col_e = ws_horas[f"E{r}"].value
-            if op_col_d and hr_col_e is not None:
-                op_oficial = unificar_nombre(op_col_d)
-                try:
-                    horas_float = float(str(hr_col_e).replace(',', '.'))
-                    totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + horas_float
-                except ValueError:
-                    pass
-
-        fila_actual_totales = 2
-        for operario, total_horas in sorted(totales_acumulados.items()):
-            ws_horas[f"G{fila_actual_totales}"] = operario
-            ws_horas[f"H{fila_actual_totales}"] = total_horas
-            fila_actual_totales += 1
-
-        excel_buffer = io.BytesIO()
-        wb.save(excel_buffer)
-        excel_buffer.seek(0)
-
-        # --- MOSTRAR BOTONES DE DESCARGA ---
-        st.success("¡Todo procesado con éxito! Descarga tus archivos aquí abajo:")
-        
-        st.download_button(
-            label="📥 Descargar Parte en PDF",
-            data=pdf_output,
-            file_name=f"Parte_{num_parte}_{fecha}.pdf",
-            mime="application/pdf"
-        )
-        
-        st.download_button(
-            label="📥 Descargar Excel Actualizado",
-            data=excel_buffer,
-            file_name="Plantilla_Parte_Obra_Profesional.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-else:
-    st.info("Por favor, sube cualquier archivo Excel (.xlsx) en la sección de abajo para activar el botón de procesar.")
+        pdf.set_font("Helvetica
