@@ -17,7 +17,6 @@ HISTORIAL_HORAS_CSV = "historial_horas_operarios.csv"
 
 # --- ZONA DE SEGURIDAD (BARRA LATERAL) ---
 st.sidebar.header("🔑 Zona de Administración")
-# Puedes cambiar "admin123" por la contraseña que tú quieras entre las comillas
 CONTRASENA_CORRECTA = "admin123" 
 password_input = st.sidebar.text_input("Introduce contraseña para ver historial", type="password")
 
@@ -65,6 +64,97 @@ def limpiar_texto_pdf(texto):
     for orig, dest in reemplazos.items():
         t = t.replace(orig, dest)
     return t
+
+def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_texto, mats_texto):
+    """Función auxiliar para reconstruir el PDF con los datos guardados"""
+    class PDFParte(FPDF):
+        def header(self):
+            self.set_font("Helvetica", "B", 14)
+            self.set_text_color(46, 125, 50)
+            self.cell(190, 10, "PARTE DIARIO DE TRABAJO", border=1, align="C")
+            self.ln(15)
+
+    pdf = PDFParte(orientation="P", unit="mm", format="A4")
+    pdf.add_page()
+    pdf.set_font("Helvetica", "", 10)
+
+    # Bloque Información General
+    pdf.set_fill_color(232, 245, 233)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Nº Parte:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(num_p), border=1)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Fecha:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(fec), border=1)
+    pdf.ln(7)
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Obra:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(ob), border=1)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Jefe de Obra:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(jf), border=1)
+    pdf.ln(7)
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Ubicacion:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(ubi), border=1)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(30, 7, "Cliente:", border=1, fill=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(65, 7, limpiar_texto_pdf(cli), border=1)
+    pdf.ln(12)
+
+    # Trabajos
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(25, 110, 30)
+    pdf.cell(190, 7, "TRABAJOS REALIZADOS")
+    pdf.ln(7)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(190, 6, limpiar_texto_pdf(trabs) if trabs else "Ninguno", border=1)
+    pdf.ln(10)
+
+    # Personal Asignado (Texto unificado)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(25, 110, 30)
+    pdf.cell(190, 7, "PERSONAL ASIGNADO")
+    pdf.ln(7)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(190, 6, limpiar_texto_pdf(ops_texto) if ops_texto else "No se registro personal", border=1)
+    pdf.ln(10)
+
+    # Materiales (Texto unificado)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(25, 110, 30)
+    pdf.cell(190, 7, "MATERIALES UTILIZADOS")
+    pdf.ln(7)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(190, 6, limpiar_texto_pdf(mats_texto) if mats_texto else "No se registraron materiales", border=1)
+    pdf.ln(8)
+    
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(190, 6, f"Kilometros realizados: {kilometros} km")
+    pdf.ln(6)
+
+    # Firmas
+    pdf.ln(15)
+    pos_y = pdf.get_y()
+    pdf.line(20, pos_y + 15, 80, pos_y + 15)
+    pdf.line(130, pos_y + 15, 190, pos_y + 15)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_y(pos_y + 16)
+    pdf.cell(95, 5, "Firma del Cliente", align="C")
+    pdf.cell(95, 5, "Firma del Jefe de Obra", align="C")
+
+    return bytes(pdf.output())
 
 # ==========================================
 # 2. FORMULARIO DE ENTRADA DE DATOS (WEB)
@@ -122,121 +212,15 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
     materiales_texto = ", ".join(materiales_lista)
 
     # --- GENERAR PDF ---
-    class PDFParte(FPDF):
-        def header(self):
-            self.set_font("Helvetica", "B", 14)
-            self.set_text_color(46, 125, 50)
-            self.cell(190, 10, "PARTE DIARIO DE TRABAJO", border=1, align="C")
-            self.ln(15)
-
-    pdf = PDFParte(orientation="P", unit="mm", format="A4")
-    pdf.add_page()
-    pdf.set_font("Helvetica", "", 10)
-
-    # Bloque Información General
-    pdf.set_fill_color(232, 245, 233)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Nº Parte:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(num_parte), border=1)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Fecha:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(fecha), border=1)
-    pdf.ln(7)
-
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Obra:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(obra), border=1)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Jefe de Obra:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(jefe_obra), border=1)
-    pdf.ln(7)
-
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Ubicacion:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(ubicacion), border=1)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(30, 7, "Cliente:", border=1, fill=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(65, 7, limpiar_texto_pdf(cliente), border=1)
-    pdf.ln(12)
-
-    # Trabajos
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(25, 110, 30)
-    pdf.cell(190, 7, "TRABAJOS REALIZADOS")
-    pdf.ln(7)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(190, 6, limpiar_texto_pdf(trabajos) if trabajos else "Ninguno", border=1)
-    pdf.ln(10)
-
-    # Operarios en PDF
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(25, 110, 30)
-    pdf.cell(190, 7, "PERSONAL ASIGNADO")
-    pdf.ln(7)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(130, 6, "Operario", border=1, fill=True)
-    pdf.cell(60, 6, "Horas", border=1, fill=True)
-    pdf.ln(6)
-    pdf.set_font("Helvetica", "", 10)
-    if not operarios_datos_crudos:
-        pdf.cell(190, 6, "No se registro personal", border=1)
-        pdf.ln(6)
-    for op, hr in operarios_datos_crudos:
-        pdf.cell(130, 6, limpiar_texto_pdf(op), border=1)
-        pdf.cell(60, 6, f"{hr} h", border=1)
-        pdf.ln(6)
-    pdf.ln(10)
-
-    # Materiales en PDF
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(25, 110, 30)
-    pdf.cell(190, 7, "MATERIALES UTILIZADOS")
-    pdf.ln(7)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(100, 6, "Material", border=1, fill=True)
-    pdf.cell(45, 6, "Cantidad", border=1, fill=True)
-    pdf.cell(45, 6, "Unidad", border=1, fill=True)
-    pdf.ln(6)
-    pdf.set_font("Helvetica", "", 10)
-    if not materiales_datos:
-        pdf.cell(190, 6, "No se registraron materiales", border=1)
-        pdf.ln(6)
-    for mat, cant, uni in materiales_datos:
-        pdf.cell(100, 6, limpiar_texto_pdf(mat), border=1)
-        pdf.cell(45, 6, limpiar_texto_pdf(cant), border=1)
-        pdf.cell(45, 6, limpiar_texto_pdf(uni), border=1)
-        pdf.ln(6)
-    pdf.ln(8)
-    
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(190, 6, f"Kilometros realizados: {km} km")
-    pdf.ln(6)
-
-    # Firmas
-    pdf.ln(15)
-    pos_y = pdf.get_y()
-    pdf.line(20, pos_y + 15, 80, pos_y + 15)
-    pdf.line(130, pos_y + 15, 190, pos_y + 15)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_y(pos_y + 16)
-    pdf.cell(95, 5, "Firma del Cliente", align="C")
-    pdf.cell(95, 5, "Firma del Jefe de Obra", align="C")
-
-    pdf_output = bytes(pdf.output())
+    pdf_output = generar_pdf_generico(
+        num_parte, fecha, obra, cliente, jefe_obra, ubicacion, km, trabajos, operarios_texto, materiales_texto
+    )
 
     # --- GUARDAR EN HISTORIAL LOCAL (CSV) ---
     nueva_fila_base = pd.DataFrame([{
         "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra, "Cliente": cliente,
-        "Ubicación": ubicacion, "Operarios": operarios_texto, "Materiales": materiales_texto,
+        "Jefe de Obra": jefe_obra, "Ubicación": ubicacion, "Trabajos": trabajos,
+        "Operarios": operarios_texto, "Materiales": materiales_texto,
         "Km": km, "Procesado": "No"
     }])
     if os.path.exists(HISTORIAL_CSV):
@@ -263,7 +247,7 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
 
     st.success("✅ ¡Parte registrado con éxito!")
 
-    # --- BOTONES DE DESCARGA ---
+    # --- BOTÓN DE DESCARGA ---
     st.download_button(
         label="📥 Descargar Este Parte en PDF",
         data=pdf_output,
@@ -272,7 +256,7 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
     )
 
 # ==========================================
-# 4. VISTA DEL HISTORIAL (SOLO VISIBLE SI ES ADMIN)
+# 4. VISTA DEL HISTORIAL (SOLO ADMIN)
 # ==========================================
 if es_admin:
     st.markdown("---")
@@ -282,6 +266,41 @@ if es_admin:
         df_ver_base = pd.read_csv(HISTORIAL_CSV)
         st.dataframe(df_ver_base, use_container_width=True)
         
+        # --- NUEVA FUNCIÓN: RECUPERAR / DESCARGAR CUALQUIER PDF ---
+        st.markdown("#### 📄 Recuperar PDF desde el Historial")
+        opciones_partes = df_ver_base.apply(lambda row: f"Parte Nº {row['Nº Parte']} - Obra: {row['Obra']} ({row['Fecha']})", axis=1).tolist()
+        
+        parte_seleccionado_str = st.selectbox("Selecciona el parte que quieres descargar en PDF:", opciones_partes)
+        
+        if parte_seleccionado_str:
+            # Obtener el índice seleccionado
+            idx = opciones_partes.index(parte_seleccionado_str)
+            fila_p = df_ver_base.iloc[idx]
+            
+            # Reconstruir el PDF con los datos guardados en esa fila
+            pdf_historial_bytes = generar_pdf_generico(
+                str(fila_p.get("Nº Parte", "")),
+                str(fila_p.get("Fecha", "")),
+                str(fila_p.get("Obra", "")),
+                str(fila_p.get("Cliente", "")),
+                str(fila_p.get("Jefe de Obra", "")),
+                str(fila_p.get("Ubicación", "")),
+                int(fila_p.get("Km", 0)),
+                str(fila_p.get("Trabajos", "")),
+                str(fila_p.get("Operarios", "")),
+                str(fila_p.get("Materiales", ""))
+            )
+            
+            st.download_button(
+                label=f"📥 Descargar PDF del Parte Nº {fila_p['Nº Parte']}",
+                data=pdf_historial_bytes,
+                file_name=f"Parte_{fila_p['Nº Parte']}_{fila_p['Fecha']}.pdf",
+                mime="application/pdf",
+                key="btn_descarga_historial"
+            )
+        
+        st.markdown("---")
+        # Generar descarga del Excel completo
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
             df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
