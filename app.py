@@ -11,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
 st.title("🚧 Sistema de Gestión de Partes de Obra (Conectado a Google Drive)")
 
-# Establecer conexión segura con Google Sheets usando los Secrets de Streamlit
+# Conexión explícita usando el archivo de Secrets configurado
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Diccionario global de unificación de nombres
