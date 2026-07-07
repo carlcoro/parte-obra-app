@@ -29,13 +29,14 @@ def unificar_nombre(nombre_crudo):
     return DICCIONARIO_NOMBRES.get(str(nombre_crudo).strip().lower(), str(nombre_crudo).strip())
 
 def limpiar_texto_pdf(texto):
-    """Reemplaza caracteres conflictivos para evitar errores en fuentes estándar de FPDF"""
+    """Reemplaza caracteres conflictivos y símbolos como el € para evitar errores en FPDF"""
     if not texto:
         return ""
     reemplazos = {
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U'
+        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
+        '€': 'Euros'  # Evita que el PDF se rompa si pones el símbolo del euro
     }
     t = str(texto)
     for orig, dest in reemplazos.items():
@@ -247,7 +248,9 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
         mime="application/pdf"
     )
 
-# --- SECCIÓN DEL HISTORIAL GENERAL ---
+# ==========================================
+# 4. SECCIÓN DEL HISTORIAL GENERAL VISIBLE
+# ==========================================
 st.markdown("---")
 st.subheader("📊 Historial de Partes Acumulados")
 
@@ -255,7 +258,7 @@ if os.path.exists(HISTORIAL_CSV):
     df_ver_base = pd.read_csv(HISTORIAL_CSV)
     st.dataframe(df_ver_base, use_container_width=True)
     
-    # Permitir descargar todo el historial acumulado en Excel al instante
+    # Generar descarga del Excel completo acumulado al vuelo
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
