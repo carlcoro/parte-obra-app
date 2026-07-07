@@ -1,4 +1,5 @@
-openpyxl
-fpdf2
+streamlit
 pandas
-st-gsheets-connection
+fpdf2
+openpyxl
+streamlit-gsheets-connection
