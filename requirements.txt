@@ -2,4 +2,3 @@ streamlit
 pandas
 fpdf2
 openpyxl
-streamlit-gsheets-connection
