@@ -1,19 +1,18 @@
 import streamlit as st
-import openpyxl
 import pandas as pd
 from fpdf import FPDF
 import io
 import datetime
-import os
+from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
 # 1. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
 # ==========================================
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
-st.title("🚧 Sistema de Gestión de Partes de Obra")
+st.title("🚧 Sistema de Gestión de Partes de Obra (Conectado a Google Drive)")
 
-# Ruta del archivo Excel en el servidor (ahora es automático)
-EXCEL_PATH = "Plantilla_Parte_Obra_Profesional.xlsx"
+# Establecer conexión segura con Google Sheets usando los Secrets de Streamlit
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Diccionario global de unificación de nombres
 DICCIONARIO_NOMBRES = {
@@ -42,12 +41,6 @@ def limpiar_texto_pdf(texto):
         t = t.replace(orig, dest)
     return t
 
-# Verificación de seguridad si el Excel no existiera en GitHub
-if not os.path.exists(EXCEL_PATH):
-    # Si no existe, creamos uno vacío automáticamente para que nunca falle la app
-    wb_inicial = openpyxl.Workbook()
-    wb_inicial.save(EXCEL_PATH)
-
 # ==========================================
 # 2. FORMULARIO DE ENTRADA DE DATOS (WEB)
 # ==========================================
@@ -64,7 +57,7 @@ with col3:
     ubicacion = st.text_input("Ubicación", value="")
     km = st.number_input("Kilómetros realizados", min_value=0, value=0)
 
-trabajos = st.text_area("Trabajos Realizados (Introduce los detalles de lo que se ha hecho)", value="")
+trabajos = st.text_area("Trabajos Realizados", value="")
 
 st.subheader("👥 Personal Asignado")
 df_operarios = st.data_editor(
@@ -83,7 +76,7 @@ df_materiales = st.data_editor(
 # ==========================================
 # 3. LÓGICA DE PROCESAMIENTO AL PULSAR BOTÓN
 # ==========================================
-if st.button("🚀 Generar Documentos y Actualizar Historial"):
+if st.button("🚀 Registrar Parte y Guardar en Google Drive"):
     
     # --- PROCESAR OPERARIOS Y MATERIALES ---
     operarios_datos_crudos = []
@@ -215,74 +208,82 @@ if st.button("🚀 Generar Documentos y Actualizar Historial"):
 
     pdf_output = bytes(pdf.output())
 
-    # --- MODIFICAR EXCEL LOCAL (HISTORIAL AUTOMÁTICO) ---
-    wb = openpyxl.load_workbook(EXCEL_PATH)
-    
-    if "Base de Datos" not in wb.sheetnames:
-        ws_base = wb.create_sheet(title="Base de Datos")
-        ws_base.append(["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
-    else:
-        ws_base = wb["Base de Datos"]
+    # --- GUARDAR HISTORIAL DIRECTO EN GOOGLE SHEETS ---
+    try:
+        # Leer datos actuales de la pestaña Base de Datos (si existe, si no, crearla)
+        try:
+            df_base_existente = conn.read(worksheet="Base de Datos")
+        except Exception:
+            df_base_existente = pd.DataFrame(columns=["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
         
-    nueva_fila = [fecha, num_parte, obra, cliente, ubicacion, operarios_texto, materiales_texto, km, "No"]
-    ws_base.append(nueva_fila)
+        nueva_fila_base = pd.DataFrame([{
+            "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra, "Cliente": cliente,
+            "Ubicación": ubicacion, "Operarios": operarios_texto, "Materiales": materiales_texto,
+            "Km": km, "Procesado": "No"
+        }])
+        df_base_final = pd.concat([df_base_existente, nueva_fila_base], ignore_index=True)
+        conn.update(worksheet="Base de Datos", data=df_base_final)
 
-    if "Historial_Horas" not in wb.sheetnames:
-        ws_horas = wb.create_sheet(title="Historial_Horas")
-        ws_horas.append(["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas"])
-    else:
-        ws_horas = wb["Historial_Horas"]
+        # Leer datos actuales de Historial Horas
+        try:
+            df_horas_existente = conn.read(worksheet="Historial_Horas")
+        except Exception:
+            df_horas_existente = pd.DataFrame(columns=["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas", "", "OPERARIO (TOTALES)", "TOTAL ACUMULADO"])
 
-    for nombre_op, horas_op in operarios_datos_crudos:
-        ws_horas.append([fecha, num_parte, obra, nombre_op, horas_op])
+        nuevas_filas_horas = []
+        for nombre_op, horas_op in operarios_datos_crudos:
+            nuevas_filas_horas.append({
+                "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra,
+                "Nombre Operario": nombre_op, "Horas Trabajadas": horas_op
+            })
+        
+        df_nuevas_horas = pd.DataFrame(nuevas_filas_horas)
+        df_horas_combinado = pd.concat([df_horas_existente[["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas"]], df_nuevas_horas], ignore_index=True)
+        
+        # Recalcular los totales acumulados de horas por operario
+        totales_acumulados = {}
+        for _, row in df_horas_combinado.iterrows():
+            op = row["Nombre Operario"]
+            hr = row["Horas Trabajadas"]
+            if op and pd.notna(hr):
+                op_oficial = unificar_nombre(op)
+                try:
+                    totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + float(hr)
+                except ValueError:
+                    pass
+        
+        # Crear columnas G y H de totales acumulados ordenados
+        lista_totales_op = []
+        lista_totales_hr = []
+        for operario, total_h in sorted(totales_acumulados.items()):
+            lista_totales_op.append(operario)
+            lista_totales_hr.append(total_h)
+            
+        # Hacer que coincidan en tamaño rellenando con vacíos
+        max_len = max(len(df_horas_combinado), len(lista_totales_op))
+        
+        df_horas_final = pd.DataFrame()
+        df_horas_final["Fecha"] = df_horas_combinado["Fecha"].reindex(range(max_len), fill_value="")
+        df_horas_final["Nº Parte"] = df_horas_combinado["Nº Parte"].reindex(range(max_len), fill_value="")
+        df_horas_final["Obra"] = df_horas_combinado["Obra"].reindex(range(max_len), fill_value="")
+        df_horas_final["Nombre Operario"] = df_horas_combinado["Nombre Operario"].reindex(range(max_len), fill_value="")
+        df_horas_final["Horas Trabajadas"] = df_horas_combinado["Horas Trabajadas"].reindex(range(max_len), fill_value=None)
+        df_horas_final[""] = ""
+        df_horas_final["OPERARIO (TOTALES)"] = pd.Series(lista_totales_op).reindex(range(max_len), fill_value="")
+        df_horas_final["TOTAL ACUMULADO"] = pd.Series(lista_totales_hr).reindex(range(max_len), fill_value=None)
 
-    # Recalcular totales en las columnas G e H
-    for fila in range(1, ws_horas.max_row + 1):
-        ws_horas[f"G{fila}"] = None
-        ws_horas[f"H{fila}"] = None
-
-    ws_horas["G1"] = "OPERARIO (TOTALES)"
-    ws_horas["H1"] = "TOTAL ACUMULADO"
-
-    totales_acumulados = {}
-    for r in range(2, ws_horas.max_row + 1):
-        op_col_d = ws_horas[f"D{r}"].value
-        hr_col_e = ws_horas[f"E{r}"].value
-        if op_col_d and hr_col_e is not None:
-            op_oficial = unificar_nombre(op_col_d)
-            try:
-                horas_float = float(str(hr_col_e).replace(',', '.'))
-                totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + horas_float
-            except ValueError:
-                pass
-
-    fila_actual_totales = 2
-    for operario, total_horas in sorted(totales_acumulados.items()):
-        ws_horas[f"G{fila_actual_totales}"] = operario
-        ws_horas[f"H{fila_actual_totales}"] = total_horas
-        fila_actual_totales += 1
-
-    # Guardar el archivo directamente en el servidor para que mantenga la memoria
-    wb.save(EXCEL_PATH)
-
-    # Preparar buffer de descarga para el usuario
-    excel_buffer = io.BytesIO()
-    wb.save(excel_buffer)
-    excel_buffer.seek(0)
-
-    # --- MOSTRAR BOTONES DE DESCARGA ---
-    st.success("✅ ¡Datos grabados en el historial del servidor y documentos generados!")
+        conn.update(worksheet="Historial_Horas", data=df_horas_final)
+        
+        st.success("✅ ¡Parte registrado con éxito! Los datos se han guardado de forma permanente en tu Google Drive.")
     
+    except Exception as e:
+        st.error(f"Error guardando en Google Sheets: {e}")
+        st.warning("El PDF se generará igualmente, pero revisa las credenciales de los Secrets.")
+
+    # --- BOTÓN DE DESCARGA DEL PDF ---
     st.download_button(
         label="📥 Descargar Este Parte en PDF",
         data=pdf_output,
         file_name=f"Parte_{num_parte}_{fecha}.pdf",
         mime="application/pdf"
-    )
-    
-    st.download_button(
-        label="📥 Descargar Todo el Historial Excel Actualizado",
-        data=excel_buffer,
-        file_name="Plantilla_Parte_Obra_Profesional.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
