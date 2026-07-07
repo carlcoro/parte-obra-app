@@ -3,3 +3,4 @@ pandas
 fpdf2
 openpyxl
 streamlit-drawable-canvas
+opencv-python-headless
