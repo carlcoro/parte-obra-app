@@ -9,11 +9,34 @@ import os
 # 1. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
 # ==========================================
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
-st.title("🚧 Sistema de Gestión de Partes de Obra (Historial Local Activo)")
+st.title("🚧 Sistema de Gestión de Partes de Obra")
 
-# Archivo de persistencia de datos dentro del servidor de Streamlit
+# Archivos de almacenamiento en el servidor
 HISTORIAL_CSV = "historial_partes_obra.csv"
 HISTORIAL_HORAS_CSV = "historial_horas_operarios.csv"
+
+# --- ZONA DE SEGURIDAD (BARRA LATERAL) ---
+st.sidebar.header("🔑 Zona de Administración")
+# Puedes cambiar "admin123" por la contraseña que tú quieras entre las comillas
+CONTRASENA_CORRECTA = "admin123" 
+password_input = st.sidebar.text_input("Introduce contraseña para ver historial", type="password")
+
+# Comprobamos si eres el administrador
+es_admin = (password_input == CONTRASENA_CORRECTA)
+
+if es_admin:
+    st.sidebar.success("🔓 Modo Administrador Activo")
+    
+    # BOTÓN PARA RESETEAR / BORRAR HISTORIAL
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🚨 Peligro: Limpieza")
+    if st.sidebar.button("🗑️ Borrar todo el Historial (Resetear app)"):
+        if os.path.exists(HISTORIAL_CSV):
+            os.remove(HISTORIAL_CSV)
+        if os.path.exists(HISTORIAL_HORAS_CSV):
+            os.remove(HISTORIAL_HORAS_CSV)
+        st.sidebar.warning("¡Historial reseteado por completo! Las pruebas han sido eliminadas.")
+        st.rerun()
 
 # Diccionario global de unificación de nombres
 DICCIONARIO_NOMBRES = {
@@ -36,7 +59,7 @@ def limpiar_texto_pdf(texto):
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
         'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
-        '€': 'Euros'  # Evita que el PDF se rompa si pones el símbolo del euro
+        '€': 'Euros'
     }
     t = str(texto)
     for orig, dest in reemplazos.items():
@@ -238,7 +261,7 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
             df_horas_final = df_nuevas_horas
         df_horas_final.to_csv(HISTORIAL_HORAS_CSV, index=False)
 
-    st.success("✅ ¡Parte registrado y guardado en el historial de la aplicación!")
+    st.success("✅ ¡Parte registrado con éxito!")
 
     # --- BOTONES DE DESCARGA ---
     st.download_button(
@@ -249,28 +272,28 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
     )
 
 # ==========================================
-# 4. SECCIÓN DEL HISTORIAL GENERAL VISIBLE
+# 4. VISTA DEL HISTORIAL (SOLO VISIBLE SI ES ADMIN)
 # ==========================================
-st.markdown("---")
-st.subheader("📊 Historial de Partes Acumulados")
-
-if os.path.exists(HISTORIAL_CSV):
-    df_ver_base = pd.read_csv(HISTORIAL_CSV)
-    st.dataframe(df_ver_base, use_container_width=True)
+if es_admin:
+    st.markdown("---")
+    st.subheader("📊 Panel de Control e Historial Completo (Modo Admin)")
     
-    # Generar descarga del Excel completo acumulado al vuelo
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-        df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
-        if os.path.exists(HISTORIAL_HORAS_CSV):
-            df_ver_horas = pd.read_csv(HISTORIAL_HORAS_CSV)
-            df_ver_horas.to_excel(writer, sheet_name="Historial_Horas", index=False)
-            
-    st.download_button(
-        label="📥 Descargar Historial Completo en Excel (.xlsx)",
-        data=excel_buffer.getvalue(),
-        file_name="Historial_General_Partes.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-else:
-    st.info("Aún no hay partes registrados en el historial.")
+    if os.path.exists(HISTORIAL_CSV):
+        df_ver_base = pd.read_csv(HISTORIAL_CSV)
+        st.dataframe(df_ver_base, use_container_width=True)
+        
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
+            if os.path.exists(HISTORIAL_HORAS_CSV):
+                df_ver_horas = pd.read_csv(HISTORIAL_HORAS_CSV)
+                df_ver_horas.to_excel(writer, sheet_name="Historial_Horas", index=False)
+                
+        st.download_button(
+            label="📥 Descargar Historial Completo en Excel (.xlsx)",
+            data=excel_buffer.getvalue(),
+            file_name="Historial_General_Partes.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("El historial está vacío actualmente. Listo para usar mañana.")
