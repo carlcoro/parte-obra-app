@@ -3,16 +3,17 @@ import pandas as pd
 from fpdf import FPDF
 import io
 import datetime
-from streamlit_gsheets import GSheetsConnection
+import os
 
 # ==========================================
 # 1. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
 # ==========================================
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
-st.title("🚧 Sistema de Gestión de Partes de Obra (Conectado a Google Drive)")
+st.title("🚧 Sistema de Gestión de Partes de Obra (Historial Local Activo)")
 
-# Conexión con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Archivo de persistencia de datos dentro del servidor de Streamlit
+HISTORIAL_CSV = "historial_partes_obra.csv"
+HISTORIAL_HORAS_CSV = "historial_horas_operarios.csv"
 
 # Diccionario global de unificación de nombres
 DICCIONARIO_NOMBRES = {
@@ -76,7 +77,7 @@ df_materiales = st.data_editor(
 # ==========================================
 # 3. LÓGICA DE PROCESAMIENTO AL PULSAR BOTÓN
 # ==========================================
-if st.button("🚀 Registrar Parte y Guardar en Google Drive"):
+if st.button("🚀 Registrar Parte y Guardar en el Historial"):
     
     # --- PROCESAR OPERARIOS Y MATERIALES ---
     operarios_datos_crudos = []
@@ -208,30 +209,65 @@ if st.button("🚀 Registrar Parte y Guardar en Google Drive"):
 
     pdf_output = bytes(pdf.output())
 
-    # --- GUARDAR HISTORIAL ---
-    try:
-        # Intentamos usar el método update nativo
-        try:
-            df_base_existente = conn.read(worksheet="Base de Datos", ttl=0)
-        except Exception:
-            df_base_existente = pd.DataFrame(columns=["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
-        
-        nueva_fila_base = pd.DataFrame([{
-            "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra, "Cliente": cliente,
-            "Ubicación": ubicacion, "Operarios": operarios_texto, "Materiales": materiales_texto,
-            "Km": km, "Procesado": "No"
-        }])
+    # --- GUARDAR EN HISTORIAL LOCAL (CSV) ---
+    nueva_fila_base = pd.DataFrame([{
+        "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra, "Cliente": cliente,
+        "Ubicación": ubicacion, "Operarios": operarios_texto, "Materiales": materiales_texto,
+        "Km": km, "Procesado": "No"
+    }])
+    if os.path.exists(HISTORIAL_CSV):
+        df_base_existente = pd.read_csv(HISTORIAL_CSV)
         df_base_final = pd.concat([df_base_existente, nueva_fila_base], ignore_index=True)
-        conn.update(worksheet="Base de Datos", data=df_base_final)
-        st.success("✅ ¡Parte guardado con éxito en tu Google Drive!")
-    except Exception as e:
-        st.error(f"Error de permisos de escritura en Google Drive: {e}")
-        st.info("💡 Para solucionar esto, por favor abre tu Google Sheets, haz clic en 'Compartir' y asegúrate de que el acceso general esté configurado como 'Cualquier persona con el enlace' y con el rol cambiado de 'Lector' a 'Editor'.")
+    else:
+        df_base_final = nueva_fila_base
+    df_base_final.to_csv(HISTORIAL_CSV, index=False)
 
-    # --- BOTÓN DE DESCARGA DEL PDF ---
+    nuevas_filas_horas = []
+    for nombre_op, horas_op in operarios_datos_crudos:
+        nuevas_filas_horas.append({
+            "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra,
+            "Nombre Operario": nombre_op, "Horas Trabajadas": horas_op
+        })
+    if nuevas_filas_horas:
+        df_nuevas_horas = pd.DataFrame(nuevas_filas_horas)
+        if os.path.exists(HISTORIAL_HORAS_CSV):
+            df_horas_existente = pd.read_csv(HISTORIAL_HORAS_CSV)
+            df_horas_final = pd.concat([df_horas_existente, df_nuevas_horas], ignore_index=True)
+        else:
+            df_horas_final = df_nuevas_horas
+        df_horas_final.to_csv(HISTORIAL_HORAS_CSV, index=False)
+
+    st.success("✅ ¡Parte registrado y guardado en el historial de la aplicación!")
+
+    # --- BOTONES DE DESCARGA ---
     st.download_button(
         label="📥 Descargar Este Parte en PDF",
         data=pdf_output,
         file_name=f"Parte_{num_parte}_{fecha}.pdf",
         mime="application/pdf"
     )
+
+# --- SECCIÓN DEL HISTORIAL GENERAL ---
+st.markdown("---")
+st.subheader("📊 Historial de Partes Acumulados")
+
+if os.path.exists(HISTORIAL_CSV):
+    df_ver_base = pd.read_csv(HISTORIAL_CSV)
+    st.dataframe(df_ver_base, use_container_width=True)
+    
+    # Permitir descargar todo el historial acumulado en Excel al instante
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
+        if os.path.exists(HISTORIAL_HORAS_CSV):
+            df_ver_horas = pd.read_csv(HISTORIAL_HORAS_CSV)
+            df_ver_horas.to_excel(writer, sheet_name="Historial_Horas", index=False)
+            
+    st.download_button(
+        label="📥 Descargar Historial Completo en Excel (.xlsx)",
+        data=excel_buffer.getvalue(),
+        file_name="Historial_General_Partes.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.info("Aún no hay partes registrados en el historial.")
