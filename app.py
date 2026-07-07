@@ -5,11 +5,13 @@ from fpdf import FPDF
 import io
 import datetime
 
-# Configuración e interfaz de Streamlit
+# ==========================================
+# 1. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
+# ==========================================
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
 st.title("🚧 Sistema de Gestión de Partes de Obra")
 
-# Diccionario de unificación de nombres
+# Diccionario global de unificación de nombres (¡Aquí está definido de forma segura!)
 DICCIONARIO_NOMBRES = {
     "carlos": "Carlos Corobo", "carlos c": "Carlos Corobo", "carlos corobo": "Carlos Corobo",
     "sergio": "Sergio Moreno", "sergio m": "Sergio Moreno", "sergio moreno": "Sergio Moreno",
@@ -36,7 +38,9 @@ def limpiar_texto_pdf(texto):
         t = t.replace(orig, dest)
     return t
 
-# Formulario de entrada de datos en la web
+# ==========================================
+# 2. FORMULARIO DE ENTRADA DE DATOS (WEB)
+# ==========================================
 col1, col2, col3 = st.columns(3)
 with col1:
     num_parte = st.text_input("Nº Parte", value="1001")
@@ -69,10 +73,13 @@ df_materiales = st.data_editor(
 st.subheader("📁 Archivo Base")
 archivo_subido = st.file_uploader("Sube tu archivo 'Plantilla_Parte_Obra_Profesional.xlsx'", type=["xlsx"])
 
+# ==========================================
+# 3. LÓGICA DE PROCESAMIENTO AL PULSAR BOTÓN
+# ==========================================
 if archivo_subido is not None:
     if st.button("🚀 Generar Documentos y Actualizar Base de Datos"):
         
-        # --- PROCESAR DATOS ---
+        # --- PROCESAR OPERARIOS Y MATERIALES ---
         operarios_datos_crudos = []
         operarios_lista = []
         for index, row in df_operarios.iterrows():
@@ -188,7 +195,6 @@ if archivo_subido is not None:
         pdf.cell(95, 5, "Firma del Cliente", align="C")
         pdf.cell(95, 5, "Firma del Jefe de Obra", align="C", ln=1)
 
-        # Corrección del codec usando UTF-8 de forma segura
         pdf_output = pdf.output(dest='S').encode('utf-8', errors='replace')
 
         # --- MODIFICAR EXCEL EN MEMORIA ---
@@ -212,7 +218,7 @@ if archivo_subido is not None:
         for nombre_op, horas_op in operarios_datos_crudos:
             ws_horas.append([fecha, num_parte, obra, nombre_op, horas_op])
 
-        # Recalcular totales acumulados en G y H
+        # Limpieza de columnas G y H para recalcular totales de forma segura
         for fila in range(1, ws_horas.max_row + 1):
             ws_horas[f"G{fila}"] = None
             ws_horas[f"H{fila}"] = None
@@ -227,3 +233,36 @@ if archivo_subido is not None:
             if op_col_d and hr_col_e is not None:
                 op_oficial = unificar_nombre(op_col_d)
                 try:
+                    horas_float = float(str(hr_col_e).replace(',', '.'))
+                    totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + horas_float
+                except ValueError:
+                    pass
+
+        fila_actual_totales = 2
+        for operario, total_horas in sorted(totales_acumulados.items()):
+            ws_horas[f"G{fila_actual_totales}"] = operario
+            ws_horas[f"H{fila_actual_totales}"] = total_horas
+            fila_actual_totales += 1
+
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        excel_buffer.seek(0)
+
+        # --- MOSTRAR BOTONES DE DESCARGA ---
+        st.success("¡Todo procesado con éxito! Descarga tus archivos aquí abajo:")
+        
+        st.download_button(
+            label="📥 Descargar Parte en PDF",
+            data=pdf_output,
+            file_name=f"Parte_{num_parte}_{fecha}.pdf",
+            mime="application/pdf"
+        )
+        
+        st.download_button(
+            label="📥 Descargar Excel Actualizado",
+            data=excel_buffer,
+            file_name="Plantilla_Parte_Obra_Profesional.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+else:
+    st.info("Por favor, sube cualquier archivo Excel (.xlsx) en la sección de abajo para activar el botón de procesar.")
