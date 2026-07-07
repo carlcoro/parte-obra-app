@@ -1,3 +1,4 @@
 openpyxl
 fpdf2
 pandas
+st-gsheets-connection
