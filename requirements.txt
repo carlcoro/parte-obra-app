@@ -1,0 +1,4 @@
+Plaintext
+openpyxl
+fpdf2
+pandas
