@@ -4,6 +4,9 @@ from fpdf import FPDF
 import io
 import datetime
 import os
+from streamlit_drawable_canvas import st_canvas
+import cv2
+import numpy as np
 
 # ==========================================
 # 1. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
@@ -20,13 +23,10 @@ st.sidebar.header("🔑 Zona de Administración")
 CONTRASENA_CORRECTA = "admin123" 
 password_input = st.sidebar.text_input("Introduce contraseña para ver historial", type="password")
 
-# Comprobamos si eres el administrador
 es_admin = (password_input == CONTRASENA_CORRECTA)
 
 if es_admin:
     st.sidebar.success("🔓 Modo Administrador Activo")
-    
-    # BOTÓN PARA RESETEAR / BORRAR HISTORIAL
     st.sidebar.markdown("---")
     st.sidebar.subheader("🚨 Peligro: Limpieza")
     if st.sidebar.button("🗑️ Borrar todo el Historial (Resetear app)"):
@@ -34,7 +34,7 @@ if es_admin:
             os.remove(HISTORIAL_CSV)
         if os.path.exists(HISTORIAL_HORAS_CSV):
             os.remove(HISTORIAL_HORAS_CSV)
-        st.sidebar.warning("¡Historial reseteado por completo! Las pruebas han sido eliminadas.")
+        st.sidebar.warning("¡Historial reseteado por completo!")
         st.rerun()
 
 # Diccionario global de unificación de nombres
@@ -51,22 +51,20 @@ def unificar_nombre(nombre_crudo):
     return DICCIONARIO_NOMBRES.get(str(nombre_crudo).strip().lower(), str(nombre_crudo).strip())
 
 def limpiar_texto_pdf(texto):
-    """Reemplaza caracteres conflictivos y símbolos como el € para evitar errores en FPDF"""
     if not texto:
         return ""
     reemplazos = {
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
-        '€': 'Euros'
+        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U', '€': 'Euros'
     }
     t = str(texto)
     for orig, dest in reemplazos.items():
         t = t.replace(orig, dest)
     return t
 
-def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_texto, mats_texto):
-    """Función auxiliar para reconstruir el PDF con los datos guardados"""
+def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_texto, mats_texto, firma_nombre="", firma_dni="", firma_bytes=None):
+    """Función para construir el PDF incluyendo datos de firma si existen"""
     class PDFParte(FPDF):
         def header(self):
             self.set_font("Helvetica", "B", 14)
@@ -120,7 +118,7 @@ def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_te
     pdf.multi_cell(190, 6, limpiar_texto_pdf(trabs) if trabs else "Ninguno", border=1)
     pdf.ln(10)
 
-    # Personal Asignado (Texto unificado)
+    # Personal Asignado
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(25, 110, 30)
     pdf.cell(190, 7, "PERSONAL ASIGNADO")
@@ -130,7 +128,7 @@ def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_te
     pdf.multi_cell(190, 6, limpiar_texto_pdf(ops_texto) if ops_texto else "No se registro personal", border=1)
     pdf.ln(10)
 
-    # Materiales (Texto unificado)
+    # Materiales
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(25, 110, 30)
     pdf.cell(190, 7, "MATERIALES UTILIZADOS")
@@ -142,17 +140,27 @@ def generar_pdf_generico(num_p, fec, ob, cli, jf, ubi, kilometros, trabs, ops_te
     
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(190, 6, f"Kilometros realizados: {kilometros} km")
-    pdf.ln(6)
+    pdf.ln(10)
 
-    # Firmas
-    pdf.ln(15)
-    pos_y = pdf.get_y()
-    pdf.line(20, pos_y + 15, 80, pos_y + 15)
-    pdf.line(130, pos_y + 15, 190, pos_y + 15)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_y(pos_y + 16)
-    pdf.cell(95, 5, "Firma del Cliente", align="C")
-    pdf.cell(95, 5, "Firma del Jefe de Obra", align="C")
+    # --- SECCIÓN DE FIRMA EN EL PDF ---
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(25, 110, 30)
+    pdf.cell(190, 7, "CONFORMIDAD Y FIRMA")
+    pdf.ln(7)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    
+    texto_firmante = f"Firmante: {firma_nombre if firma_nombre else 'No especificado'} | DNI: {firma_dni if firma_dni else 'No especificado'}"
+    pdf.cell(190, 6, limpiar_texto_pdf(texto_firmante), ln=True)
+    
+    if firma_bytes is not None:
+        # Insertar la firma dibujada directamente en el PDF
+        pdf.image(io.BytesIO(firma_bytes), x=20, y=pdf.get_y() + 2, w=60)
+        pdf.ln(25)
+    else:
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.cell(190, 8, "[Parte guardado sin firma digital]", ln=True)
+        pdf.ln(5)
 
     return bytes(pdf.output())
 
@@ -175,25 +183,37 @@ with col3:
 trabajos = st.text_area("Trabajos Realizados", value="")
 
 st.subheader("👥 Personal Asignado")
-df_operarios = st.data_editor(
-    pd.DataFrame([{"Operario": "", "Horas": 0.0}]),
-    num_rows="dynamic",
-    key="tabla_operarios"
-)
+df_operarios = st.data_editor(pd.DataFrame([{"Operario": "", "Horas": 0.0}]), num_rows="dynamic", key="tabla_operarios")
 
 st.subheader("📦 Materiales Utilizados")
-df_materiales = st.data_editor(
-    pd.DataFrame([{"Material": "", "Cantidad": 0.0, "Unidad": "uds"}]),
-    num_rows="dynamic",
-    key="tabla_materiales"
-)
+df_materiales = st.data_editor(pd.DataFrame([{"Material": "", "Cantidad": 0.0, "Unidad": "uds"}]), num_rows="dynamic", key="tabla_materiales")
+
+# --- NUEVA ZONA: FIRMA DIGITAL EN PANTALLA ---
+st.markdown("---")
+st.subheader("✍️ Firma Digital de Conformidad (Opcional)")
+col_f1, col_f2 = st.columns(2)
+with col_f1:
+    nombre_firmante = st.text_input("Nombre y Apellidos de quien firma")
+    dni_firmante = st.text_input("DNI / NIE")
+with col_f2:
+    st.write("Firma con el dedo o ratón dentro del recuadro:")
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 255, 255, 0)",
+        stroke_width=3,
+        stroke_color="#000000",
+        background_color="#FFFFFF",
+        height=120,
+        width=300,
+        drawing_mode="freedraw",
+        key="canvas",
+    )
 
 # ==========================================
 # 3. LÓGICA DE PROCESAMIENTO AL PULSAR BOTÓN
 # ==========================================
 if st.button("🚀 Registrar Parte y Guardar en el Historial"):
     
-    # --- PROCESAR OPERARIOS Y MATERIALES ---
+    # Procesar Operarios y Materiales
     operarios_datos_crudos = []
     operarios_lista = []
     for index, row in df_operarios.iterrows():
@@ -211,18 +231,35 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
             materiales_datos.append((str(row['Material']), str(row['Cantidad']), str(row['Unidad'])))
     materiales_texto = ", ".join(materiales_lista)
 
-    # --- GENERAR PDF ---
+    # Procesar la firma digital si se ha dibujado algo
+    firma_png_bytes = None
+    if canvas_result.image_data is not None:
+        # Verificar si realmente el usuario dibujó algo (no es un lienzo en blanco)
+        img = canvas_result.image_data
+        if np.any(img[:, :, 3] > 0): # Si hay algún píxel dibujado
+            # Convertir a formato adecuado para el PDF
+            import cv2
+            alpha_channel = img[:, :, 3]
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+            _, encoded_img = cv2.imencode(".png", rgb_img)
+            firma_png_bytes = encoded_img.tobytes()
+
+    # Generar PDF incluyendo los datos y bytes de la firma
     pdf_output = generar_pdf_generico(
-        num_parte, fecha, obra, cliente, jefe_obra, ubicacion, km, trabajos, operarios_texto, materiales_texto
+        num_parte, fecha, obra, cliente, jefe_obra, ubicacion, km, trabajos, 
+        operarios_texto, materiales_texto, nombre_firmante, dni_firmante, firma_png_bytes
     )
 
-    # --- GUARDAR EN HISTORIAL LOCAL (CSV) ---
+    # Guardar en Historial Local CSV
     nueva_fila_base = pd.DataFrame([{
         "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra, "Cliente": cliente,
         "Jefe de Obra": jefe_obra, "Ubicación": ubicacion, "Trabajos": trabajos,
-        "Operarios": operarios_texto, "Materiales": materiales_texto,
-        "Km": km, "Procesado": "No"
+        "Operarios": operarios_texto, "Materiales": materiales_texto, "Km": km,
+        "Firmante": nombre_firmante if nombre_firmante else "Sin firma",
+        "DNI Firmante": dni_firmante if dni_firmante else "Sin DNI",
+        "Procesado": "No"
     }])
+    
     if os.path.exists(HISTORIAL_CSV):
         df_base_existente = pd.read_csv(HISTORIAL_CSV)
         df_base_final = pd.concat([df_base_existente, nueva_fila_base], ignore_index=True)
@@ -230,6 +267,7 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
         df_base_final = nueva_fila_base
     df_base_final.to_csv(HISTORIAL_CSV, index=False)
 
+    # Guardar Horas Operarios
     nuevas_filas_horas = []
     for nombre_op, horas_op in operarios_datos_crudos:
         nuevas_filas_horas.append({
@@ -247,7 +285,6 @@ if st.button("🚀 Registrar Parte y Guardar en el Historial"):
 
     st.success("✅ ¡Parte registrado con éxito!")
 
-    # --- BOTÓN DE DESCARGA ---
     st.download_button(
         label="📥 Descargar Este Parte en PDF",
         data=pdf_output,
@@ -266,41 +303,6 @@ if es_admin:
         df_ver_base = pd.read_csv(HISTORIAL_CSV)
         st.dataframe(df_ver_base, use_container_width=True)
         
-        # --- NUEVA FUNCIÓN: RECUPERAR / DESCARGAR CUALQUIER PDF ---
-        st.markdown("#### 📄 Recuperar PDF desde el Historial")
-        opciones_partes = df_ver_base.apply(lambda row: f"Parte Nº {row['Nº Parte']} - Obra: {row['Obra']} ({row['Fecha']})", axis=1).tolist()
-        
-        parte_seleccionado_str = st.selectbox("Selecciona el parte que quieres descargar en PDF:", opciones_partes)
-        
-        if parte_seleccionado_str:
-            # Obtener el índice seleccionado
-            idx = opciones_partes.index(parte_seleccionado_str)
-            fila_p = df_ver_base.iloc[idx]
-            
-            # Reconstruir el PDF con los datos guardados en esa fila
-            pdf_historial_bytes = generar_pdf_generico(
-                str(fila_p.get("Nº Parte", "")),
-                str(fila_p.get("Fecha", "")),
-                str(fila_p.get("Obra", "")),
-                str(fila_p.get("Cliente", "")),
-                str(fila_p.get("Jefe de Obra", "")),
-                str(fila_p.get("Ubicación", "")),
-                int(fila_p.get("Km", 0)),
-                str(fila_p.get("Trabajos", "")),
-                str(fila_p.get("Operarios", "")),
-                str(fila_p.get("Materiales", ""))
-            )
-            
-            st.download_button(
-                label=f"📥 Descargar PDF del Parte Nº {fila_p['Nº Parte']}",
-                data=pdf_historial_bytes,
-                file_name=f"Parte_{fila_p['Nº Parte']}_{fila_p['Fecha']}.pdf",
-                mime="application/pdf",
-                key="btn_descarga_historial"
-            )
-        
-        st.markdown("---")
-        # Generar descarga del Excel completo
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
             df_ver_base.to_excel(writer, sheet_name="Base de Datos", index=False)
@@ -315,4 +317,4 @@ if es_admin:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.info("El historial está vacío actualmente. Listo para usar mañana.")
+        st.info("El historial está vacío actualmente.")
