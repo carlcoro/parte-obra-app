@@ -11,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
 st.title("🚧 Sistema de Gestión de Partes de Obra (Conectado a Google Drive)")
 
-# Conexión explícita usando el archivo de Secrets configurado
+# Conexión con Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Diccionario global de unificación de nombres
@@ -208,11 +208,11 @@ if st.button("🚀 Registrar Parte y Guardar en Google Drive"):
 
     pdf_output = bytes(pdf.output())
 
-    # --- GUARDAR HISTORIAL DIRECTO EN GOOGLE SHEETS ---
+    # --- GUARDAR HISTORIAL ---
     try:
-        # Leer datos actuales de la pestaña Base de Datos (si existe, si no, crearla)
+        # Intentamos usar el método update nativo
         try:
-            df_base_existente = conn.read(worksheet="Base de Datos")
+            df_base_existente = conn.read(worksheet="Base de Datos", ttl=0)
         except Exception:
             df_base_existente = pd.DataFrame(columns=["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
         
@@ -223,62 +223,10 @@ if st.button("🚀 Registrar Parte y Guardar en Google Drive"):
         }])
         df_base_final = pd.concat([df_base_existente, nueva_fila_base], ignore_index=True)
         conn.update(worksheet="Base de Datos", data=df_base_final)
-
-        # Leer datos actuales de Historial Horas
-        try:
-            df_horas_existente = conn.read(worksheet="Historial_Horas")
-        except Exception:
-            df_horas_existente = pd.DataFrame(columns=["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas", "", "OPERARIO (TOTALES)", "TOTAL ACUMULADO"])
-
-        nuevas_filas_horas = []
-        for nombre_op, horas_op in operarios_datos_crudos:
-            nuevas_filas_horas.append({
-                "Fecha": fecha, "Nº Parte": num_parte, "Obra": obra,
-                "Nombre Operario": nombre_op, "Horas Trabajadas": horas_op
-            })
-        
-        df_nuevas_horas = pd.DataFrame(nuevas_filas_horas)
-        df_horas_combinado = pd.concat([df_horas_existente[["Fecha", "Nº Parte", "Obra", "Nombre Operario", "Horas Trabajadas"]], df_nuevas_horas], ignore_index=True)
-        
-        # Recalcular los totales acumulados de horas por operario
-        totales_acumulados = {}
-        for _, row in df_horas_combinado.iterrows():
-            op = row["Nombre Operario"]
-            hr = row["Horas Trabajadas"]
-            if op and pd.notna(hr):
-                op_oficial = unificar_nombre(op)
-                try:
-                    totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + float(hr)
-                except ValueError:
-                    pass
-        
-        # Crear columnas G y H de totales acumulados ordenados
-        lista_totales_op = []
-        lista_totales_hr = []
-        for operario, total_h in sorted(totales_acumulados.items()):
-            lista_totales_op.append(operario)
-            lista_totales_hr.append(total_h)
-            
-        # Hacer que coincidan en tamaño rellenando con vacíos
-        max_len = max(len(df_horas_combinado), len(lista_totales_op))
-        
-        df_horas_final = pd.DataFrame()
-        df_horas_final["Fecha"] = df_horas_combinado["Fecha"].reindex(range(max_len), fill_value="")
-        df_horas_final["Nº Parte"] = df_horas_combinado["Nº Parte"].reindex(range(max_len), fill_value="")
-        df_horas_final["Obra"] = df_horas_combinado["Obra"].reindex(range(max_len), fill_value="")
-        df_horas_final["Nombre Operario"] = df_horas_combinado["Nombre Operario"].reindex(range(max_len), fill_value="")
-        df_horas_final["Horas Trabajadas"] = df_horas_combinado["Horas Trabajadas"].reindex(range(max_len), fill_value=None)
-        df_horas_final[""] = ""
-        df_horas_final["OPERARIO (TOTALES)"] = pd.Series(lista_totales_op).reindex(range(max_len), fill_value="")
-        df_horas_final["TOTAL ACUMULADO"] = pd.Series(lista_totales_hr).reindex(range(max_len), fill_value=None)
-
-        conn.update(worksheet="Historial_Horas", data=df_horas_final)
-        
-        st.success("✅ ¡Parte registrado con éxito! Los datos se han guardado de forma permanente en tu Google Drive.")
-    
+        st.success("✅ ¡Parte guardado con éxito en tu Google Drive!")
     except Exception as e:
-        st.error(f"Error guardando en Google Sheets: {e}")
-        st.warning("El PDF se generará igualmente, pero revisa las credenciales de los Secrets.")
+        st.error(f"Error de permisos de escritura en Google Drive: {e}")
+        st.info("💡 Para solucionar esto, por favor abre tu Google Sheets, haz clic en 'Compartir' y asegúrate de que el acceso general esté configurado como 'Cualquier persona con el enlace' y con el rol cambiado de 'Lector' a 'Editor'.")
 
     # --- BOTÓN DE DESCARGA DEL PDF ---
     st.download_button(
