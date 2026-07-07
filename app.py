@@ -5,9 +5,7 @@ from fpdf import FPDF
 import io
 import datetime
 
-# ==========================================
-# 0. CONFIGURACIÓN E INTERFAZ DE STREAMLIT
-# ==========================================
+# Configuración e interfaz de Streamlit
 st.set_page_config(page_title="Gestor de Partes de Obra", layout="wide")
 st.title("🚧 Sistema de Gestión de Partes de Obra")
 
@@ -24,12 +22,10 @@ def unificar_nombre(nombre_crudo):
         return "Desconocido"
     return DICCIONARIO_NOMBRES.get(str(nombre_crudo).strip().lower(), str(nombre_crudo).strip())
 
-# ==========================================
-# 1. FORMULARIO DE ENTRADA DE DATOS
-# ==========================================
+# Formulario de entrada de datos en la web
 col1, col2, col3 = st.columns(3)
 with col1:
-    num_parte = st.text_input("Nº Parte", value="1")
+    num_parte = st.text_input("Nº Parte", value="1001")
     obra = st.text_input("Obra", value="Sin Obra")
     cliente = st.text_input("Cliente", value="")
 with col2:
@@ -40,7 +36,7 @@ with col3:
     ubicacion = st.text_input("Ubicación", value="")
     km = st.number_input("Kilómetros realizados", min_value=0, value=0)
 
-trabajos = st.text_area("Trabajos Realizados (Uno por línea)", value="")
+trabajos = st.text_area("Trabajos Realizados (Introduce los detalles de lo que se ha hecho)", value="")
 
 st.subheader("👥 Personal Asignado")
 df_operarios = st.data_editor(
@@ -56,17 +52,13 @@ df_materiales = st.data_editor(
     key="tabla_materiales"
 )
 
-# Subir la plantilla Excel existente
 st.subheader("📁 Archivo Base")
 archivo_subido = st.file_uploader("Sube tu archivo 'Plantilla_Parte_Obra_Profesional.xlsx'", type=["xlsx"])
 
-# ==========================================
-# 2. PROCESAMIENTO Y GENERACIÓN (AL COLEGIO DE BOTONES)
-# ==========================================
 if archivo_subido is not None:
     if st.button("🚀 Generar Documentos y Actualizar Base de Datos"):
         
-        # --- PROCESAR DATOS DE OPERARIOS Y MATERIALES ---
+        # --- PROCESAR DATOS ---
         operarios_datos_crudos = []
         operarios_lista = []
         for index, row in df_operarios.iterrows():
@@ -84,7 +76,7 @@ if archivo_subido is not None:
                 materiales_datos.append((str(row['Material']), str(row['Cantidad']), str(row['Unidad'])))
         materiales_texto = ", ".join(materiales_lista)
 
-        # --- GENERAR PDF EN MEMORIA ---
+        # --- GENERAR PDF ---
         class PDFParte(FPDF):
             def header(self):
                 self.set_font("Helvetica", "B", 14)
@@ -107,7 +99,6 @@ if archivo_subido is not None:
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(65, 7, str(fecha), border=1, ln=1)
 
-        # (Se omite parte del diseño visual repetitivo del PDF por espacio, mantiene tu estructura original)
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Obra:", border=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
@@ -116,32 +107,86 @@ if archivo_subido is not None:
         pdf.cell(30, 7, "Jefe de Obra:", border=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(65, 7, str(jefe_obra), border=1, ln=1)
+
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(30, 7, "Ubicación:", border=1, fill=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(65, 7, str(ubicacion), border=1)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(30, 7, "Cliente:", border=1, fill=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(65, 7, str(cliente), border=1, ln=1)
         pdf.ln(5)
 
         # Trabajos
         pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(25, 110, 30)
         pdf.cell(190, 7, "TRABAJOS REALIZADOS", ln=1)
+        pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "", 10)
         pdf.multi_cell(190, 6, trabajos if trabajos else "Ninguno", border=1)
         pdf.ln(5)
 
         # Operarios en PDF
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(25, 110, 30)
+        pdf.cell(190, 7, "PERSONAL ASIGNADO", ln=1)
+        pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(130, 6, "Operario", border=1, fill=True)
         pdf.cell(60, 6, "Horas", border=1, ln=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
+        if not operarios_datos_crudos:
+            pdf.cell(190, 6, "No se registró personal", border=1, ln=1)
         for op, hr in operarios_datos_crudos:
             pdf.cell(130, 6, str(op), border=1)
             pdf.cell(60, 6, f"{hr} h", border=1, ln=1)
+        pdf.ln(5)
 
-        # Convertir PDF a bytes para descarga
+        # Materiales en PDF
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(25, 110, 30)
+        pdf.cell(190, 7, "MATERIALES UTILIZADOS", ln=1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(100, 6, "Material", border=1, fill=True)
+        pdf.cell(45, 6, "Cantidad", border=1, fill=True)
+        pdf.cell(45, 6, "Unidad", border=1, ln=1, fill=True)
+        pdf.set_font("Helvetica", "", 10)
+        if not materiales_datos:
+            pdf.cell(190, 6, "No se registraron materiales", border=1, ln=1)
+        for mat, cant, uni in materiales_datos:
+            pdf.cell(100, 6, mat, border=1)
+            pdf.cell(45, 6, cant, border=1)
+            pdf.cell(45, 6, uni, border=1, ln=1)
+        pdf.ln(6)
+        
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(190, 6, f"Kilómetros realizados: {km} km", ln=1)
+
+        # Firmas
+        pdf.ln(15)
+        pos_y = pdf.get_y()
+        pdf.line(20, pos_y + 15, 80, pos_y + 15)
+        pdf.line(130, pos_y + 15, 190, pos_y + 15)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_y(pos_y + 16)
+        pdf.cell(95, 5, "Firma del Cliente", align="C")
+        pdf.cell(95, 5, "Firma del Jefe de Obra", align="C", ln=1)
+
         pdf_output = pdf.output(dest='S').encode('latin1')
 
         # --- MODIFICAR EXCEL EN MEMORIA ---
         wb = openpyxl.load_workbook(archivo_subido)
-        ws_base = wb["Base de Datos"]
         
-        nueva_fila = [fecha, num_parte, obra, cliente, "", operarios_texto, materiales_texto, km, "No"]
+        # Comprobar si existen las pestañas, si no, se crean de forma segura
+        if "Base de Datos" not in wb.sheetnames:
+            ws_base = wb.create_sheet(title="Base de Datos")
+            ws_base.append(["Fecha", "Nº Parte", "Obra", "Cliente", "Ubicación", "Operarios", "Materiales", "Km", "Procesado"])
+        else:
+            ws_base = wb["Base de Datos"]
+            
+        nueva_fila = [fecha, num_parte, obra, cliente, ubicacion, operarios_texto, materiales_texto, km, "No"]
         ws_base.append(nueva_fila)
 
         if "Historial_Horas" not in wb.sheetnames:
@@ -153,13 +198,38 @@ if archivo_subido is not None:
         for nombre_op, horas_op in operarios_datos_crudos:
             ws_horas.append([fecha, num_parte, obra, nombre_op, horas_op])
 
-        # Guardar cambios del Excel en un buffer de memoria
+        # Recalcular totales acumulados en columnas G y H de Historial_Horas de forma segura
+        for fila in range(1, ws_horas.max_row + 1):
+            ws_horas[f"G{fila}"] = None
+            ws_horas[f"H{fila}"] = None
+
+        ws_horas["G1"] = "OPERARIO (TOTALES)"
+        ws_horas["H1"] = "TOTAL ACUMULADO"
+
+        totales_acumulados = {}
+        for r in range(2, ws_horas.max_row + 1):
+            op_col_d = ws_horas[f"D{r}"].value
+            hr_col_e = ws_horas[f"E{r}"].value
+            if op_col_d and hr_col_e is not None:
+                op_oficial = unificar_nombre(op_col_d)
+                try:
+                    horas_float = float(str(hr_col_e).replace(',', '.'))
+                    totales_acumulados[op_oficial] = totales_acumulados.get(op_oficial, 0.0) + horas_float
+                except ValueError:
+                    pass
+
+        fila_actual_totales = 2
+        for operario, total_horas in sorted(totales_acumulados.items()):
+            ws_horas[f"G{fila_actual_totales}"] = operario
+            ws_horas[f"H{fila_actual_totales}"] = total_horas
+            fila_actual_totales += 1
+
         excel_buffer = io.BytesIO()
         wb.save(excel_buffer)
         excel_buffer.seek(0)
 
         # --- MOSTRAR BOTONES DE DESCARGA ---
-        st.success("¡Todo procesado con éxito en la nube! Descarga tus archivos aquí abajo:")
+        st.success("¡Todo procesado con éxito! Descarga tus archivos aquí abajo:")
         
         st.download_button(
             label="📥 Descargar Parte en PDF",
@@ -175,4 +245,4 @@ if archivo_subido is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 else:
-    st.info("Por favor, sube tu archivo Excel en la sección de arriba para comenzar a operar.")
+    st.info("Por favor, sube cualquier archivo Excel (.xlsx) en la sección de abajo para activar el botón de procesar.")
