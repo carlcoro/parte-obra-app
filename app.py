@@ -102,9 +102,9 @@ if archivo_subido is not None:
             def header(self):
                 self.set_font("Helvetica", "B", 14)
                 self.set_text_color(46, 125, 50)
-                # Formato moderno fpdf2: usando new_x y new_y en lugar de ln=1
-                self.cell(190, 10, "PARTE DIARIO DE TRABAJO", border=1, align="C", new_x="LMARGIN", new_y="NEXT")
-                self.ln(5)
+                # Formato universal: Escribir celda y hacer salto de línea manual con ln()
+                self.cell(190, 10, "PARTE DIARIO DE TRABAJO", border=1, align="C")
+                self.ln(15)
 
         pdf = PDFParte(orientation="P", unit="mm", format="A4")
         pdf.add_page()
@@ -119,7 +119,8 @@ if archivo_subido is not None:
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Fecha:", border=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
-        pdf.cell(65, 7, limpiar_texto_pdf(fecha), border=1, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(65, 7, limpiar_texto_pdf(fecha), border=1)
+        pdf.ln(7)
 
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Obra:", border=1, fill=True)
@@ -128,7 +129,8 @@ if archivo_subido is not None:
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Jefe de Obra:", border=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
-        pdf.cell(65, 7, limpiar_texto_pdf(jefe_obra), border=1, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(65, 7, limpiar_texto_pdf(jefe_obra), border=1)
+        pdf.ln(7)
 
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Ubicacion:", border=1, fill=True)
@@ -137,54 +139,64 @@ if archivo_subido is not None:
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(30, 7, "Cliente:", border=1, fill=True)
         pdf.set_font("Helvetica", "", 10)
-        pdf.cell(65, 7, limpiar_texto_pdf(cliente), border=1, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(5)
+        pdf.cell(65, 7, limpiar_texto_pdf(cliente), border=1)
+        pdf.ln(12)
 
         # Trabajos
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(25, 110, 30)
-        pdf.cell(190, 7, "TRABAJOS REALIZADOS", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(190, 7, "TRABAJOS REALIZADOS")
+        pdf.ln(7)
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "", 10)
         pdf.multi_cell(190, 6, limpiar_texto_pdf(trabajos) if trabajos else "Ninguno", border=1)
-        pdf.ln(5)
+        pdf.ln(10)
 
         # Operarios en PDF
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(25, 110, 30)
-        pdf.cell(190, 7, "PERSONAL ASIGNADO", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(190, 7, "PERSONAL ASIGNADO")
+        pdf.ln(7)
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(130, 6, "Operario", border=1, fill=True)
-        pdf.cell(60, 6, "Horas", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(60, 6, "Horas", border=1, fill=True)
+        pdf.ln(6)
         pdf.set_font("Helvetica", "", 10)
         if not operarios_datos_crudos:
-            pdf.cell(190, 6, "No se registro personal", border=1, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(190, 6, "No se registro personal", border=1)
+            pdf.ln(6)
         for op, hr in operarios_datos_crudos:
             pdf.cell(130, 6, limpiar_texto_pdf(op), border=1)
-            pdf.cell(60, 6, f"{hr} h", border=1, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(5)
+            pdf.cell(60, 6, f"{hr} h", border=1)
+            pdf.ln(6)
+        pdf.ln(10)
 
         # Materiales en PDF
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(25, 110, 30)
-        pdf.cell(190, 7, "MATERIALES UTILIZADOS", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(190, 7, "MATERIALES UTILIZADOS")
+        pdf.ln(7)
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(100, 6, "Material", border=1, fill=True)
         pdf.cell(45, 6, "Cantidad", border=1, fill=True)
-        pdf.cell(45, 6, "Unidad", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(45, 6, "Unidad", border=1, fill=True)
+        pdf.ln(6)
         pdf.set_font("Helvetica", "", 10)
         if not materiales_datos:
-            pdf.cell(190, 6, "No se registraron materiales", border=1, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(190, 6, "No se registraron materiales", border=1)
+            pdf.ln(6)
         for mat, cant, uni in materiales_datos:
             pdf.cell(100, 6, limpiar_texto_pdf(mat), border=1)
             pdf.cell(45, 6, limpiar_texto_pdf(cant), border=1)
-            pdf.cell(45, 6, limpiar_texto_pdf(uni), border=1, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(6)
+            pdf.cell(45, 6, limpiar_texto_pdf(uni), border=1)
+            pdf.ln(6)
+        pdf.ln(8)
         
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(190, 6, f"Kilometros realizados: {km} km", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(190, 6, f"Kilometros realizados: {km} km")
+        pdf.ln(6)
 
         # Firmas
         pdf.ln(15)
@@ -194,9 +206,9 @@ if archivo_subido is not None:
         pdf.set_font("Helvetica", "", 9)
         pdf.set_y(pos_y + 16)
         pdf.cell(95, 5, "Firma del Cliente", align="C")
-        pdf.cell(95, 5, "Firma del Jefe de Obra", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(95, 5, "Firma del Jefe de Obra", align="C")
 
-        pdf_output = pdf.output()  # En fpdf2 moderno, output() directo ya devuelve bytes o string seguro
+        pdf_output = pdf.output()
 
         # --- MODIFICAR EXCEL EN MEMORIA ---
         wb = openpyxl.load_workbook(archivo_subido)
